@@ -42,10 +42,45 @@
         .coin { width: 50px; height: 50px; background: var(--gold); color: #000; border-radius: 50%; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; opacity: 0; }
         .pop { animation: coinPop 0.6s ease-out forwards; }
         .back { animation: coinBack 0.6s ease-in forwards; }
-        #sidebar-results { position: absolute; right: 5%; top: 50%; transform: translateY(-50%); border-left: 2px solid var(--gold); padding: 25px; background: rgba(0,0,0,0.85); width: 260px; pointer-events: all; display: none; }
+        
+        /* 侧边栏及 AI 框优化 */
+        #sidebar-results { 
+            position: absolute; right: 5%; top: 50%; transform: translateY(-50%); 
+            border-left: 2px solid var(--gold); padding: 25px; 
+            background: rgba(0,0,0,0.85); width: 300px; /* 稍微加宽 */
+            pointer-events: all; display: none; 
+            scrollbar-width: none; /* 隐藏火狐滚动条 */
+        }
+        #sidebar-results::-webkit-scrollbar { display: none; } /* 隐藏 Chrome 滚动条 */
+
         .line-item { margin: 12px 0; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center; }
         .svg-symbol { width: 100px; height: 14px; display: flex; justify-content: center; }
+        
+        #ai-interpretation { 
+            margin-top: 20px; border-top: 1px solid var(--gold); padding-top: 12px; 
+            font-size: 1rem; line-height: 1.6; max-height: 350px; overflow-y: auto;
+            cursor: zoom-in; /* 提示可以点击放大 */
+            scrollbar-width: none;
+        }
+        #ai-interpretation::-webkit-scrollbar { display: none; }
+
+        /* 全屏放大框样式 */
+        #ai-modal {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0, 0, 0, 0.9); z-index: 2000;
+            display: none; align-items: center; justify-content: center;
+            pointer-events: all; backdrop-filter: blur(10px);
+        }
+        #modal-content {
+            width: 70%; max-height: 80%; overflow-y: auto;
+            color: var(--gold); font-size: 1.4rem; line-height: 1.8;
+            padding: 50px; border: 1px solid var(--gold);
+            background: rgba(20, 20, 20, 0.5); box-shadow: 0 0 30px var(--gold);
+        }
+        #close-modal { position: absolute; top: 30px; right: 50px; font-size: 2rem; cursor: pointer; font-family: 'Cinzel'; }
+
         #restart-btn { margin-top: 25px; width: 100%; background: transparent; border: 1px solid var(--gold); color: var(--gold); padding: 8px; cursor: pointer; font-family: 'Cinzel'; transition: 0.3s; }
+        #restart-btn:hover { background: var(--gold); color: #000; }
         #ink-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #fff; z-index: 100; opacity: 0; pointer-events: none; transition: opacity 1.2s; mix-blend-mode: exclusion; }
         @keyframes coinPop { 0% { transform: scale(0) translateY(-30px); opacity: 0; } 100% { transform: scale(1) translateY(0); opacity: 1; } }
         @keyframes coinBack { 0% { transform: scale(1) translateY(0); opacity: 1; } 100% { transform: scale(0) translateY(-120px); opacity: 0; } }
@@ -67,6 +102,13 @@
 
     <div id="three-container"></div>
     <div id="ink-overlay"></div>
+
+    <div id="ai-modal" onclick="closeModal()">
+        <div id="close-modal">CLOSE [X]</div>
+        <div id="modal-content" onclick="event.stopPropagation()">
+            </div>
+    </div>
+
     <div id="ui-overlay">
         <div id="header">I CHING CYBERPUNK</div>
         <div id="input-screen">
@@ -107,11 +149,11 @@
         <div id="sidebar-results">
             <div style="font-family: 'Cinzel'; margin-bottom: 20px; font-size: 1.5rem; border-bottom: 1px solid var(--gold); padding-bottom: 5px;">Hexagram</div>
             <div id="lines-container"></div>
-            <div id="ai-interpretation" style="margin-top: 20px; border-top: 1px solid var(--gold); padding-top: 12px; font-size: 0.8rem; line-height: 1.5; max-height: 300px; overflow-y: auto;">
+            <div id="ai-interpretation" onclick="openModal()">
                 <div style="font-family:'Cinzel'; margin-bottom:8px; display: flex; align-items: center; gap: 8px;">
                     <span style="color: var(--gold);">✦</span> AI INTERPRETATION
                 </div>
-                <div id="ai-text" style="color:rgba(212, 175, 55, 0.7); font-style: italic;">等待灵光注入...</div>
+                <div id="ai-text" style="color:rgba(212, 175, 55, 0.85); font-style: italic;">等待灵光注入...</div>
             </div>
             <button id="restart-btn" onclick="resetAll()">再占一卦</button>
         </div>
@@ -175,6 +217,7 @@
         scene.add(new THREE.Points(pGeom, pMat));
         camera.position.z = 600;
 
+        // --- 核心视觉逻辑 ---
         function updateVisuals(code) {
             const color = COLORS[code] || COLORS.default;
             bgMesh.material = new THREE.ShaderMaterial({
@@ -208,43 +251,21 @@
             for(let i=0; i<pCount; i++) {
                 let x = pos[i*3], y = pos[i*3+1], z = pos[i*3+2];
                 let vx = velArr[i*3], vy = velArr[i*3+1], vz = velArr[i*3+2];
-
                 switch(currentParticleMode) {
-                    case '111': // 乾：刚健放射
+                    case '111': 
                         if (Math.abs(x) > 1200 || Math.abs(y) > 1200 || Math.abs(z) > 1200) { 
                             let phi = Math.random() * Math.PI * 2; let theta = Math.random() * Math.PI; let r = Math.random() * 20; 
                             x = r * Math.sin(theta) * Math.cos(phi); y = r * Math.sin(theta) * Math.sin(phi); z = r * Math.cos(theta);
                         }
-                        x += (x / 200) * speedMult * 4.0; y += (y / 200) * speedMult * 4.0; z += (z / 200) * speedMult * 4.0;
-                        break;
-                    case '110': // 兑：螺旋流转
-                        let angleD = time * 2.0 + y * 0.01;
-                        x += Math.cos(angleD) * 4.0 * speedMult; z += Math.sin(angleD) * 4.0 * speedMult;
-                        y += vy * speedMult * 2.0; if(y > 750) y = -750;
-                        break;
-                    case '101': // 离：升腾晃动
-                        y += vy * speedMult * 12.0; x += Math.sin(time * 6.0 + i) * 3.0 * speedMult;
-                        if(y > 750) y = -750;
-                        break;
-                    case '100': // 震：雷电闪烁
-                        if(Math.random() > 0.97) { x += (Math.random()-0.5)*300; y += (Math.random()-0.5)*300; }
-                        y += vy * speedMult * 6.0; if(y > 750) y = -750;
-                        break;
-                    case '011': // 巽：顺风而动
-                        x += Math.sin(y * 0.006 + time * 1.5) * 5.0 * speedMult;
-                        y += vy * speedMult * 3.0; if(y > 750) y = -750;
-                        break;
-                    case '010': // 坎：雨落坠落
-                        y -= vy * speedMult * 15.0; if(y < -750) y = 750;
-                        break;
-                    case '001': // 艮：静止厚重
-                        x += (Math.random()-0.5) * 2.0 * speedMult; y += (Math.random()-0.5) * 2.0 * speedMult;
-                        break;
-                    case '000': // 坤：大地横移
-                        x += speedMult * 2.5; if(x > 900) x = -900;
-                        break;
-                    default: // 初始点云
-                        y += vy * speedMult; if(y > 750) y = -750;
+                        x += (x / 200) * speedMult * 4.0; y += (y / 200) * speedMult * 4.0; z += (z / 200) * speedMult * 4.0; break;
+                    case '110': let angleD = time * 2.0 + y * 0.01; x += Math.cos(angleD) * 4.0 * speedMult; z += Math.sin(angleD) * 4.0 * speedMult; y += vy * speedMult * 2.0; if(y > 750) y = -750; break;
+                    case '101': y += vy * speedMult * 12.0; x += Math.sin(time * 6.0 + i) * 3.0 * speedMult; if(y > 750) y = -750; break;
+                    case '100': if(Math.random() > 0.97) { x += (Math.random()-0.5)*300; y += (Math.random()-0.5)*300; } y += vy * speedMult * 6.0; if(y > 750) y = -750; break;
+                    case '011': x += Math.sin(y * 0.006 + time * 1.5) * 5.0 * speedMult; y += vy * speedMult * 3.0; if(y > 750) y = -750; break;
+                    case '010': y -= vy * speedMult * 15.0; if(y < -750) y = 750; break;
+                    case '001': x += (Math.random()-0.5) * 2.0 * speedMult; y += (Math.random()-0.5) * 2.0 * speedMult; break;
+                    case '000': x += speedMult * 2.5; if(x > 900) x = -900; break;
+                    default: y += vy * speedMult; if(y > 750) y = -750;
                 }
                 pos[i*3] = x; pos[i*3+1] = y; pos[i*3+2] = z;
             }
@@ -253,13 +274,12 @@
         }
         animate();
 
+        // --- 手势与占卜逻辑 ---
         const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
         hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
-        
         const canvasCtx = document.getElementById('output_canvas').getContext('2d');
         hands.onResults(results => {
-            const canvas = document.getElementById('output_canvas');
-            canvasCtx.save(); canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+            const canvas = document.getElementById('output_canvas'); canvasCtx.save(); canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 canvasCtx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
                 for (const landmarks of results.multiHandLandmarks) {
@@ -282,11 +302,7 @@
         async function detectionLoop() {
             if (!isDetecting) return;
             const video = document.getElementById('input_video');
-            if (video.readyState >= 2 && video.videoWidth > 0) {
-                const canvas = document.getElementById('output_canvas');
-                if(canvas.width !== video.videoWidth) { canvas.width = video.videoWidth; canvas.height = video.videoHeight; }
-                try { await hands.send({image: video}); } catch(e) {}
-            }
+            if (video.readyState >= 2 && video.videoWidth > 0) { try { await hands.send({image: video}); } catch(e) {} }
             setTimeout(() => requestAnimationFrame(detectionLoop), 30);
         }
 
@@ -322,6 +338,19 @@
             return I_CHING_DATA[code] || "未知卦象";
         }
 
+        // --- 核心修改：放大镜逻辑 ---
+        function openModal() {
+            const modal = document.getElementById('ai-modal');
+            const modalContent = document.getElementById('modal-content');
+            const aiText = document.getElementById('ai-text').innerHTML;
+            modalContent.innerHTML = aiText;
+            modal.style.display = "flex";
+        }
+
+        function closeModal() {
+            document.getElementById('ai-modal').style.display = "none";
+        }
+
         function triggerInkEffect() {
             inkTriggered = true;
             const ink = document.getElementById('ink-overlay');
@@ -337,9 +366,7 @@
 
             setTimeout(() => {
                 const ben = getGuaName(history, false), zhi = getGuaName(history, true);
-                updateVisuals(zhiLower); 
-                updateUpperVisuals(zhiUpper);
-
+                updateVisuals(zhiLower); updateUpperVisuals(zhiUpper);
                 document.getElementById('status-bar').innerHTML = `本卦：${ben} → 之卦：${zhi}`;
                 document.getElementById('lines-container').innerHTML = `<div style="margin-top:20px; border-top:1px solid var(--gold); padding-top:15px; line-height:1.8;">天机：【${ben}】 之 【${zhi}】<br><span style="font-size:0.8rem; opacity:0.8;">[ 诚心感悟，天机已现 ]</span></div>`;
                 
@@ -348,25 +375,20 @@
                 const names = ["初爻", "二爻", "三爻", "四爻", "五爻", "上爻"];
                 for (let i = 0; i < history.length; i++) { linesDetail += `${names[i]}:${history[i].label} `; }
 
-                // --- Vercel 相对路径调用 ---
                 fetch('/api/interpret', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        question: userQuestion,
-                        originalHex: ben,
-                        changedHex: zhi,
-                        lines: linesDetail
-                    })
+                    body: JSON.stringify({ question: userQuestion, originalHex: ben, changedHex: zhi, lines: linesDetail })
                 })
                 .then(res => res.json())
                 .then(data => {
                     if (data.success) {
                         document.getElementById('ai-text').innerHTML = data.interpretation.replace(/\n/g, '<br>');
-                        document.getElementById('sidebar-results').scrollTop = document.getElementById('sidebar-results').scrollHeight;
-                    } else {
-                        document.getElementById('ai-text').innerHTML = "AI暂时无法窥得天机，请再试。";
-                    }
+                        // 更新放大框里的内容（如果此时正打开着）
+                        if(document.getElementById('ai-modal').style.display === "flex") {
+                            document.getElementById('modal-content').innerHTML = data.interpretation.replace(/\n/g, '<br>');
+                        }
+                    } else { document.getElementById('ai-text').innerHTML = "AI暂时无法窥得天机，请再试。"; }
                 })
                 .catch(err => { document.getElementById('ai-text').innerHTML = "连接失败，请确保云端服务配置正确。"; });
 
@@ -404,9 +426,7 @@
             if (!document.fullscreenElement) { document.documentElement.requestFullscreen(); }
             else { if (document.exitFullscreen) { document.exitFullscreen(); } }
         }
-        function toggleVideoPanel() {
-            document.getElementById('video-panel').classList.toggle('expanded');
-        }
+        function toggleVideoPanel() { document.getElementById('video-panel').classList.toggle('expanded'); }
         window.addEventListener('resize', () => { renderer.setSize(window.innerWidth, window.innerHeight); camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); });
     </script>
 </body>

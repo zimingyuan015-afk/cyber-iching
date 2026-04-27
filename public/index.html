@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>CYBER I CHING | 赛博周易：轮回全功能版</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <style>
+        :root { --gold: #d4af37; --cyber-black: #050505; }
+        body, html { margin: 0; padding: 0; width: 100vw; height: 100vh; background-color: var(--cyber-black); color: var(--gold); font-family: 'Noto Serif SC', serif; overflow: hidden; }
+        #three-container { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; pointer-events: none; }
+        #ui-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+        #immersion-ctrl { position: fixed; top: 20px; left: 20px; width: 220px; background: rgba(0, 0, 0, 0.8); border: 1px solid var(--gold); z-index: 1000; padding: 12px; font-family: 'Cinzel', serif; pointer-events: all; box-shadow: 0 0 15px rgba(212, 175, 55, 0.2); transition: all 0.5s; }
+        #ctrl-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid var(--gold); padding-bottom: 5px; }
+        #ctrl-title { color: var(--gold); font-size: 0.8rem; letter-spacing: 1px; }
+        #toggle-video { color: var(--gold); cursor: pointer; font-size: 0.7rem; transition: 0.3s; }
+        #video-panel { max-height: 0; overflow: hidden; transition: max-height 0.4s ease-out; }
+        #video-panel.expanded { max-height: 160px; margin-top: 10px; margin-bottom: 10px; }
+        #video-container { width: 100%; height: 140px; background: #000; }
+        #output_canvas { width: 100%; height: 100%; object-fit: contain; transform: scaleX(-1); }
+        #fullscreen-btn { width: 100%; background: transparent; border: 1px solid var(--gold); color: var(--gold); padding: 8px; cursor: pointer; transition: 0.3s; font-size: 0.7rem; }
+        #fullscreen-btn:hover { background: var(--gold); color: #000; }
+        #header { position: absolute; top: 5%; font-family: 'Cinzel', serif; font-size: 2.2rem; letter-spacing: 5px; text-shadow: 0 0 15px var(--gold); }
+        #input-screen { display: flex; flex-direction: column; align-items: center; gap: 30px; z-index: 20; pointer-events: all; }
+        #user-question { background: rgba(212, 175, 55, 0.05); border: 1px solid var(--gold); color: var(--gold); padding: 15px 25px; font-size: 1.2rem; width: 350px; outline: none; text-align: center; }
+        #start-btn { background: transparent; border: 1px solid var(--gold); color: var(--gold); padding: 10px 40px; font-family: 'Cinzel', serif; font-size: 1.1rem; cursor: pointer; transition: 0.3s; letter-spacing: 3px; }
+        #gua-preview-bar { position: absolute; bottom: 6%; display: flex; flex-direction: column; gap: 15px; z-index: 25; pointer-events: all; justify-content: center; width: 100%; padding-right: 40px; }
+        .gua-row { display: flex; align-items: center; justify-content: center; gap: 15px; }
+        .gua-row-label { font-family: 'Cinzel'; font-size: 0.8rem; color: var(--gold); opacity: 0.7; min-width: 60px; text-align: right; }
+        .gua-btn { display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; transition: 0.3s; opacity: 0.5; }
+        .gua-btn:hover { opacity: 1; transform: translateY(-3px); }
+        .gua-btn svg { width: 30px; height: 20px; filter: drop-shadow(0 0 2px var(--gold)); }
+        .gua-btn span { font-size: 0.7rem; }
+        #divination-screen { display: none; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; }
+        #status-bar { margin-bottom: 40px; font-size: 1.3rem; text-align: center; min-height: 1.5em; text-shadow: 0 0 10px var(--gold); }
+        #altar { position: relative; width: 220px; height: 220px; }
+        #shell { width: 100%; height: 100%; background: radial-gradient(circle, #222 0%, #000 70%); border: 2px solid var(--gold); border-radius: 45%; display: flex; align-items: center; justify-content: center; font-size: 80px; }
+        .shaking { animation: shake 0.1s infinite; border-color: #fff !important; }
+        #coin-box { position: absolute; top: 110%; left: 50%; transform: translateX(-50%); display: flex; gap: 20px; }
+        .coin { width: 50px; height: 50px; background: var(--gold); color: #000; border-radius: 50%; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; opacity: 0; }
+        .pop { animation: coinPop 0.6s ease-out forwards; }
+        .back { animation: coinBack 0.6s ease-in forwards; }
+        #sidebar-results { position: absolute; right: 5%; top: 50%; transform: translateY(-50%); border-left: 2px solid var(--gold); padding: 25px; background: rgba(0,0,0,0.85); width: 260px; pointer-events: all; display: none; }
+        .line-item { margin: 12px 0; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center; }
+        .svg-symbol { width: 100px; height: 14px; display: flex; justify-content: center; }
+        #restart-btn { margin-top: 25px; width: 100%; background: transparent; border: 1px solid var(--gold); color: var(--gold); padding: 8px; cursor: pointer; font-family: 'Cinzel'; transition: 0.3s; }
+        #ink-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #fff; z-index: 100; opacity: 0; pointer-events: none; transition: opacity 1.2s; mix-blend-mode: exclusion; }
+        @keyframes coinPop { 0% { transform: scale(0) translateY(-30px); opacity: 0; } 100% { transform: scale(1) translateY(0); opacity: 1; } }
+        @keyframes coinBack { 0% { transform: scale(1) translateY(0); opacity: 1; } 100% { transform: scale(0) translateY(-120px); opacity: 0; } }
+        @keyframes shake { 0% { transform: translate(2px,2px); } 50% { transform: translate(-2px,-2px); } 100% { transform: translate(2px,2px); } }
+    </style>
+</head>
+<body>
+    <video id="input_video" style="display:none" playsinline></video>
+    <div id="immersion-ctrl">
+        <div id="ctrl-header">
+            <span id="ctrl-title">PARTICLE VOID</span>
+            <div id="toggle-video" onclick="toggleVideoPanel()">▼</div>
+        </div>
+        <div id="video-panel">
+            <div id="video-container"><canvas id="output_canvas"></canvas></div>
+        </div>
+        <button id="fullscreen-btn" onclick="toggleFullScreen()">进入沉浸模式</button>
+    </div>
+
+    <div id="three-container"></div>
+    <div id="ink-overlay"></div>
+    <div id="ui-overlay">
+        <div id="header">I CHING CYBERPUNK</div>
+        <div id="input-screen">
+            <p style="font-size: 1.2rem; letter-spacing: 2px;">心中默念所求之事</p>
+            <input type="text" id="user-question" placeholder="在此输入你的困惑..." autocomplete="off">
+            <button id="start-btn">开启灵场</button>
+        </div>
+        
+        <div id="gua-preview-bar">
+            <div class="gua-row">
+                <span class="gua-row-label">上卦：</span>
+                <div class="gua-btn" onclick="updateUpperVisuals('111')"><svg viewBox="0 0 100 60"><rect width="100" height="12"/><rect y="24" width="100" height="12"/><rect y="48" width="100" height="12"/></svg><span>乾天</span></div>
+                <div class="gua-btn" onclick="updateUpperVisuals('110')"><svg viewBox="0 0 100 60"><rect width="45" height="12"/><rect x="55" width="45" height="12"/><rect y="24" width="100" height="12"/><rect y="48" width="100" height="12"/></svg><span>兑泽</span></div>
+                <div class="gua-btn" onclick="updateUpperVisuals('101')"><svg viewBox="0 0 100 60"><rect width="100" height="12"/><rect y="24" width="45" height="12"/><rect x="55" y="24" width="45" height="12"/><rect y="48" width="100" height="12"/></svg><span>离火</span></div>
+                <div class="gua-btn" onclick="updateUpperVisuals('100')"><svg viewBox="0 0 100 60"><rect width="45" height="12"/><rect x="55" width="45" height="12"/><rect y="24" width="45" height="12"/><rect x="55" y="24" width="45" height="12"/><rect y="48" width="100" height="12"/></svg><span>震雷</span></div>
+                <div class="gua-btn" onclick="updateUpperVisuals('011')"><svg viewBox="0 0 100 60"><rect width="100" height="12"/><rect y="24" width="100" height="12"/><rect y="48" width="45" height="12"/><rect x="55" y="48" width="45" height="12"/></svg><span>巽风</span></div>
+                <div class="gua-btn" onclick="updateUpperVisuals('010')"><svg viewBox="0 0 100 60"><rect width="45" height="12"/><rect x="55" width="45" height="12"/><rect y="24" width="100" height="12"/><rect y="48" width="45" height="12"/><rect x="55" y="48" width="45" height="12"/></svg><span>坎水</span></div>
+                <div class="gua-btn" onclick="updateUpperVisuals('001')"><svg viewBox="0 0 100 60"><rect width="100" height="12"/><rect y="24" width="45" height="12"/><rect x="55" y="24" width="45" height="12"/><rect y="48" width="45" height="12"/><rect x="55" y="48" width="45" height="12"/></svg><span>艮山</span></div>
+                <div class="gua-btn" onclick="updateUpperVisuals('000')"><svg viewBox="0 0 100 60"><rect width="45" height="12"/><rect x="55" width="45" height="12"/><rect y="24" width="45" height="12"/><rect x="55" y="24" width="45" height="12"/><rect y="48" width="45" height="12"/><rect x="55" y="48" width="45" height="12"/></svg><span>坤地</span></div>
+            </div>
+            <div class="gua-row">
+                <span class="gua-row-label">下卦：</span>
+                <div class="gua-btn" onclick="updateVisuals('111')"><svg viewBox="0 0 100 60"><rect width="100" height="12"/><rect y="24" width="100" height="12"/><rect y="48" width="100" height="12"/></svg><span>乾天</span></div>
+                <div class="gua-btn" onclick="updateVisuals('110')"><svg viewBox="0 0 100 60"><rect width="45" height="12"/><rect x="55" width="45" height="12"/><rect y="24" width="100" height="12"/><rect y="48" width="100" height="12"/></svg><span>兑泽</span></div>
+                <div class="gua-btn" onclick="updateVisuals('101')"><svg viewBox="0 0 100 60"><rect width="100" height="12"/><rect y="24" width="45" height="12"/><rect x="55" y="24" width="45" height="12"/><rect y="48" width="100" height="12"/></svg><span>离火</span></div>
+                <div class="gua-btn" onclick="updateVisuals('100')"><svg viewBox="0 0 100 60"><rect width="45" height="12"/><rect x="55" width="45" height="12"/><rect y="24" width="45" height="12"/><rect x="55" y="24" width="45" height="12"/><rect y="48" width="100" height="12"/></svg><span>震雷</span></div>
+                <div class="gua-btn" onclick="updateVisuals('011')"><svg viewBox="0 0 100 60"><rect width="100" height="12"/><rect y="24" width="100" height="12"/><rect y="48" width="45" height="12"/><rect x="55" y="48" width="45" height="12"/></svg><span>巽风</span></div>
+                <div class="gua-btn" onclick="updateVisuals('010')"><svg viewBox="0 0 100 60"><rect width="45" height="12"/><rect x="55" width="45" height="12"/><rect y="24" width="100" height="12"/><rect y="48" width="45" height="12"/><rect x="55" y="48" width="45" height="12"/></svg><span>坎水</span></div>
+                <div class="gua-btn" onclick="updateVisuals('001')"><svg viewBox="0 0 100 60"><rect width="100" height="12"/><rect y="24" width="45" height="12"/><rect x="55" y="24" width="45" height="12"/><rect y="48" width="45" height="12"/><rect x="55" y="48" width="45" height="12"/></svg><span>艮山</span></div>
+                <div class="gua-btn" onclick="updateVisuals('000')"><svg viewBox="0 0 100 60"><rect width="45" height="12"/><rect x="55" width="45" height="12"/><rect y="24" width="45" height="12"/><rect x="55" y="24" width="45" height="12"/><rect y="48" width="45" height="12"/><rect x="55" y="48" width="45" height="12"/></svg><span>坤地</span></div>
+            </div>
+        </div>
+
+        <div id="divination-screen">
+            <div id="status-bar">灵场校准中...</div>
+            <div id="altar"><div id="shell">☯</div><div id="coin-box"></div></div>
+        </div>
+        <div id="sidebar-results">
+            <div style="font-family: 'Cinzel'; margin-bottom: 20px; font-size: 1.5rem; border-bottom: 1px solid var(--gold); padding-bottom: 5px;">Hexagram</div>
+            <div id="lines-container"></div>
+            <div id="ai-interpretation" style="margin-top: 20px; border-top: 1px solid var(--gold); padding-top: 12px; font-size: 0.8rem; line-height: 1.5; max-height: 300px; overflow-y: auto;">
+                <div style="font-family:'Cinzel'; margin-bottom:8px; display: flex; align-items: center; gap: 8px;">
+                    <span style="color: var(--gold);">✦</span> AI INTERPRETATION
+                </div>
+                <div id="ai-text" style="color:rgba(212, 175, 55, 0.7); font-style: italic;">等待灵光注入...</div>
+            </div>
+            <button id="restart-btn" onclick="resetAll()">再占一卦</button>
+        </div>
+    </div>
+
+    <script>
+        const I_CHING_DATA = { "111111": "乾为天", "000000": "坤为地", "100010": "水雷屯", "010001": "山水蒙", "111010": "水天需", "010111": "天水讼", "010000": "地水师", "000010": "水地比", "111011": "风天小畜", "110111": "天泽履", "111000": "地天泰", "000111": "天地否", "101111": "天火同人", "111101": "火天大有", "001000": "地山谦", "000100": "雷地豫", "100110": "泽雷随", "011001": "山风蛊", "110000": "地泽临", "000011": "风地观", "101001": "火雷噬嗑", "100101": "山火贲", "000001": "山地剥", "100000": "地雷复", "100111": "天雷无妄", "111001": "山天大畜", "100001": "山雷颐", "011110": "泽风大过", "010010": "坎为水", "101101": "离为火", "011011": "泽山咸", "110110": "雷风恒", "001111": "天山遁", "111100": "雷天大壮", "000101": "火地晋", "101000": "地火明夷", "101011": "风火家人", "110101": "火泽睽", "010011": "水山蹇", "110010": "雷水解", "110001": "山泽损", "100011": "风雷益", "111110": "泽天夬", "011111": "天风姤", "000110": "泽地萃", "011000": "地风升", "011010": "泽水困", "010110": "水风井", "101110": "泽火革", "011101": "火风鼎", "100100": "震为雷", "001001": "艮为山", "001011": "风山渐", "110100": "雷泽归妹", "101100": "雷火丰", "001101": "火山旅", "011011": "巽为风", "110110": "兑为泽", "010011": "风水涣", "110010": "水泽节", "110011": "风泽中孚", "001100": "雷山小过", "101010": "水火既济", "010101": "火水未济" };
+        const SVG_YANG = `<svg width="100" height="14"><rect width="100" height="14" rx="2" fill="currentColor" /></svg>`;
+        const SVG_YIN = `<svg width="100" height="14"><rect width="45" height="14" rx="2" fill="currentColor" /><rect x="55" width="45" height="14" rx="2" fill="currentColor" /></svg>`;
+
+        const SHADERS = {
+            "default": `void main() { gl_FragColor = vec4(0.01, 0.01, 0.01, 1.0); }`,
+            "111": `uniform float uTime; uniform float uIntensity; varying vec2 vUv; void main() { vec2 uv = vUv - 0.5; float dist = length(uv); float angle = atan(uv.y, uv.x); float rays = sin(angle * 12.0 + uTime * 1.5) * 0.5 + 0.5; rays *= sin(angle * 25.0 - uTime * 3.0) * 0.5 + 0.5; float strength = 0.05 / (dist + 0.1); strength *= (rays + 0.2) * uIntensity; vec3 goldBase = vec3(0.83, 0.68, 0.21); vec3 whiteCore = vec3(1.0, 0.95, 0.8); vec3 color = mix(vec3(0.02), goldBase, strength); color += whiteCore * (pow(strength, 3.0) * 0.5); gl_FragColor = vec4(color, 1.0); }`,
+            "110": `uniform float uTime; uniform float uIntensity; varying vec2 vUv; void main() { vec2 p = mod(vUv * 6.28, 6.28) - 250.0; vec2 i = vec2(p); float c = 1.0; float inten = .005; for (int n = 0; n < 5; n++) { float t = uTime * 0.8 * (1.0 - (3.5 / float(n+1))); i = p + vec2(cos(t - i.x) + sin(t + i.y), sin(t - i.y) + cos(t + i.x)); c += 1.0 / length(vec2(p.x / (sin(i.x + t) / inten), p.y / (cos(i.y + t) / inten))); } c = 1.17 - pow(c / 5.0, 1.4); float val = pow(abs(c), 8.0); vec3 colBase = vec3(0.0, 0.4, 0.4); vec3 colWater = vec3(0.5, 1.0, 0.83); vec3 finalColor = mix(colBase, colWater, vUv.y) + vec3(1.0) * val * uIntensity * 0.5; gl_FragColor = vec4(finalColor * smoothstep(1.2, 0.3, length(vUv - 0.5)), 1.0); }`,
+            "101": `uniform float uTime; uniform float uIntensity; varying vec2 vUv; void main() { vec2 uv = vUv; float distort = sin(uv.y * 6.0 - uTime * 4.0) * 0.04 * uIntensity; distort += sin(uv.x * 12.0 + uTime * 3.0) * 0.02 * uIntensity; vec2 dUv = uv + vec2(distort * 0.3, distort); vec3 cBot = vec3(0.1, 0.0, 0.0); vec3 cCore = vec3(1.0, 0.3, 0.0); vec3 cEdge = vec3(1.0, 1.0, 0.0); vec3 color = mix(cBot, cCore, dUv.y); color += cEdge * clamp(sin(dUv.y * 8.0 - uTime * 2.0) * 0.2, 0.0, 1.0); float pulse = sin(uTime * 8.0) * 0.05 * uIntensity; gl_FragColor = vec4(color + vec3(pulse*2.0, pulse, 0.0), 1.0); }`,
+            "100": `uniform float uTime; uniform float uIntensity; varying vec2 vUv; float h(vec2 p) { return fract(sin(dot(p, vec2(12.98, 78.23))) * 43758.54); } void main() { float ts = floor(uTime * 15.0); float g = h(vec2(vUv.y * 10.0, ts)); float xOff = (g - 0.5) * 0.05 * uIntensity * step(0.9, h(vec2(ts))); float beam = abs(0.01 / (vUv.x + xOff - h(vec2(ts)) + 0.01)) * uIntensity; vec3 col = vec3(0.5, 0.0, 1.0) * (beam * 0.5) + vec3(1.0) * pow(beam, 2.0) * 0.8; gl_FragColor = vec4(col, 1.0); }`,
+            "011": `uniform float uTime; uniform float uIntensity; varying vec2 vUv; float hash(vec2 p) { return fract(sin(dot(p, vec2(12.98, 78.23))) * 43758.54); } float noise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f); return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y); } void main() { vec2 uv = vUv; float t = uTime * 0.4; vec3 mBase = vec3(0.1, 0.99, 0.61); vec3 mDeep = vec3(0.0, 0.08, 0.06); float strands = 0.0; vec2 wUv = uv + vec2(noise(uv * 1.5 + t * 0.4) * 0.22, noise(uv * 1.0 - t * 0.2) * 0.12); for(float i=1.0; i<=6.0; i++) { float f = 12.0 + i * 3.5; float s = (0.28 + i * 0.1) * uIntensity; float a = i * 0.785; vec2 rUv = vec2(wUv.x * cos(a) - wUv.y * sin(a), wUv.x * sin(a) + wUv.y * cos(a)); float n = noise(vec2(rUv.x * 1.2 - t * s, rUv.y * f + i)); strands += pow(smoothstep(0.38, 0.95, n), 2.8) * (0.55 / i); } vec3 raw = mix(mDeep, mBase * 0.2, uv.y) + mBase * strands * 2.4 * uIntensity; vec3 final = raw / (1.0 + raw * 0.4); gl_FragColor = vec4(final, 1.0); }`,
+            "010": `uniform float uTime; uniform float uIntensity; varying vec2 vUv; void main() { float wave = (sin(vUv.y * 10.0 + uTime * 2.0) * 0.02 + sin(vUv.x * 8.0 + uTime * 1.5) * 0.01) * uIntensity; vec3 cL = vec3(0.0, 0.05, 0.2); vec3 cH = vec3(0.0, 0.6, 1.0); vec3 final = mix(cL, cH, clamp(vUv.y + wave * 5.0, 0.0, 1.0)) + vec3(sin(uTime * 3.0) * 0.05 * uIntensity); gl_FragColor = vec4(final, 0.8); }`,
+            "001": `uniform float uTime; uniform float uIntensity; varying vec2 vUv; float h(vec2 p) { return fract(sin(dot(p, vec2(12.98, 78.23))) * 43758.54); } float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f); return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); } void main() { float t = uTime * 0.1; float nMid = n(vUv * 5.0 - vec2(t * 0.15, 0.0)); vec3 col = mix(vec3(0.02, 0.03, 0.05), vec3(0.3, 0.28, 0.25), smoothstep(0.3, 0.8, nMid)); if(uIntensity > 1.2) col += vec3(0.8, 0.6, 0.3) * smoothstep(0.6, 0.9, nMid) * (sin(uTime * 5.0)*0.5+0.5) * (uIntensity - 1.0); gl_FragColor = vec4(col + vec3(0.9, 0.85, 0.7) * pow(1.0 - distance(vUv, vec2(0.5, 1.2)), 2.0) * 0.3, 1.0); }`,
+            "000": `uniform float uTime; uniform float uIntensity; varying vec2 vUv; float h(vec2 p) { return fract(sin(dot(p, vec2(12.98, 78.23))) * 43758.54); } float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f); return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); } void main() { float t = uTime * 0.15; float f = n(vUv * 3.0 + t) * 0.6 + n(vUv * 6.0 - t * 0.5) * 0.4; vec3 col = mix(vec3(0.05, 0.02, 0.0), vec3(0.4, 0.25, 0.1), f); if(uIntensity > 1.2) col += vec3(0.83, 0.68, 0.21) * smoothstep(0.7, 1.0, f) * 0.6; gl_FragColor = vec4(col * smoothstep(1.2, 0.4, length(vUv - 0.5)), 1.0); }`
+        };
+
+        const COLORS = { "111":"#d4af37", "000":"#8b5a2b", "010":"#00e5ff", "101":"#ff5722", "100":"#b026ff", "011":"#1afd9c", "001":"#d4c49a", "110":"#7fffd4", "default":"#d4af37" };
+
+        let history = [], isFist = false, isAnimating = false, isComplete = false, inkTriggered = false;
+        let videoStream = null, isDetecting = false;
+        let currentParticleMode = 'default';
+
+        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.autoClear = false;
+        document.getElementById('three-container').appendChild(renderer.domElement);
+
+        const bgScene = new THREE.Scene(), orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        let bgMaterial = new THREE.ShaderMaterial({
+            uniforms: { uTime: { value: 0 }, uIntensity: { value: 1.0 } },
+            vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position, 1.0); }`,
+            fragmentShader: SHADERS.default, transparent: true
+        });
+        const bgMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), bgMaterial);
+        bgScene.add(bgMesh);
+
+        const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 2000);
+        const pCount = 5000, pGeom = new THREE.BufferGeometry(), posArr = new Float32Array(pCount * 3), velArr = new Float32Array(pCount * 3);
+        
+        function resetParticles() {
+            const pos = pGeom.attributes.position.array;
+            for(let i=0; i<pCount; i++) {
+                pos[i*3]=(Math.random()-0.5)*1200; pos[i*3+1]=(Math.random()-0.5)*1500; pos[i*3+2]=(Math.random()-0.5)*1000;
+                velArr[i*3]=Math.random()*0.2-0.1;
+                velArr[i*3+1]=Math.random()*0.2+0.1;
+                velArr[i*3+2]=Math.random()*0.2-0.1;
+            }
+            pGeom.attributes.position.needsUpdate = true;
+        }
+        
+        pGeom.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+        resetParticles();
+        const pMat = new THREE.PointsMaterial({ color: 0xd4af37, size: 2.0, transparent: true, opacity: 0.6 });
+        scene.add(new THREE.Points(pGeom, pMat));
+        camera.position.z = 600;
+
+        function updateVisuals(code) {
+            const color = COLORS[code] || COLORS.default;
+            bgMesh.material = new THREE.ShaderMaterial({
+                uniforms: { uTime: { value: 0 }, uIntensity: { value: bgMaterial.uniforms.uIntensity.value } },
+                vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position, 1.0); }`,
+                fragmentShader: SHADERS[code] || SHADERS.default,
+                transparent: true
+            });
+            bgMaterial = bgMesh.material;
+            document.documentElement.style.setProperty('--gold', color);
+            document.getElementById('immersion-ctrl').style.borderColor = color;
+        }
+
+        function updateUpperVisuals(code) {
+            currentParticleMode = code;
+            const color = COLORS[code] || COLORS.default;
+            pMat.color.set(color); pMat.opacity = 0.8;
+            document.documentElement.style.setProperty('--gold', color);
+            document.getElementById('immersion-ctrl').style.borderColor = color;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = performance.now() * 0.001;
+            bgMaterial.uniforms.uTime.value = time;
+            bgMaterial.uniforms.uIntensity.value += ((isFist?5.0:1.2) - bgMaterial.uniforms.uIntensity.value)*0.05;
+            
+            const pos = pGeom.attributes.position.array;
+            const speedMult = isFist ? 8.0 : 1.0;
+
+            for(let i=0; i<pCount; i++) {
+                let x = pos[i*3], y = pos[i*3+1], z = pos[i*3+2];
+                let vx = velArr[i*3], vy = velArr[i*3+1], vz = velArr[i*3+2];
+
+                switch(currentParticleMode) {
+                    case '111': // 乾：刚健放射
+                        if (Math.abs(x) > 1200 || Math.abs(y) > 1200 || Math.abs(z) > 1200) { 
+                            let phi = Math.random() * Math.PI * 2; let theta = Math.random() * Math.PI; let r = Math.random() * 20; 
+                            x = r * Math.sin(theta) * Math.cos(phi); y = r * Math.sin(theta) * Math.sin(phi); z = r * Math.cos(theta);
+                        }
+                        x += (x / 200) * speedMult * 4.0; y += (y / 200) * speedMult * 4.0; z += (z / 200) * speedMult * 4.0;
+                        break;
+                    case '110': // 兑：螺旋流转
+                        let angleD = time * 2.0 + y * 0.01;
+                        x += Math.cos(angleD) * 4.0 * speedMult; z += Math.sin(angleD) * 4.0 * speedMult;
+                        y += vy * speedMult * 2.0; if(y > 750) y = -750;
+                        break;
+                    case '101': // 离：升腾晃动
+                        y += vy * speedMult * 12.0; x += Math.sin(time * 6.0 + i) * 3.0 * speedMult;
+                        if(y > 750) y = -750;
+                        break;
+                    case '100': // 震：雷电闪烁
+                        if(Math.random() > 0.97) { x += (Math.random()-0.5)*300; y += (Math.random()-0.5)*300; }
+                        y += vy * speedMult * 6.0; if(y > 750) y = -750;
+                        break;
+                    case '011': // 巽：顺风而动
+                        x += Math.sin(y * 0.006 + time * 1.5) * 5.0 * speedMult;
+                        y += vy * speedMult * 3.0; if(y > 750) y = -750;
+                        break;
+                    case '010': // 坎：雨落坠落
+                        y -= vy * speedMult * 15.0; if(y < -750) y = 750;
+                        break;
+                    case '001': // 艮：静止厚重
+                        x += (Math.random()-0.5) * 2.0 * speedMult; y += (Math.random()-0.5) * 2.0 * speedMult;
+                        break;
+                    case '000': // 坤：大地横移
+                        x += speedMult * 2.5; if(x > 900) x = -900;
+                        break;
+                    default: // 初始点云
+                        y += vy * speedMult; if(y > 750) y = -750;
+                }
+                pos[i*3] = x; pos[i*3+1] = y; pos[i*3+2] = z;
+            }
+            pGeom.attributes.position.needsUpdate = true;
+            renderer.clear(); renderer.render(bgScene, orthoCam); renderer.clearDepth(); renderer.render(scene, camera);
+        }
+        animate();
+
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+        
+        const canvasCtx = document.getElementById('output_canvas').getContext('2d');
+        hands.onResults(results => {
+            const canvas = document.getElementById('output_canvas');
+            canvasCtx.save(); canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                canvasCtx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+                for (const landmarks of results.multiHandLandmarks) {
+                    drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#ffffff', lineWidth: 3});
+                    drawLandmarks(canvasCtx, landmarks, {color: '#ffffff', radius: 1});
+                }
+                const lm = results.multiHandLandmarks[0];
+                const dFist = Math.sqrt(Math.pow(lm[8].x-lm[0].x,2)+Math.pow(lm[8].y-lm[0].y,2));
+                const dOK = Math.sqrt(Math.pow(lm[8].x-lm[4].x,2)+Math.pow(lm[8].y-lm[4].y,2));
+                if (!isComplete && !isAnimating) {
+                    if (dFist < 0.18) { if(!isFist){isFist=true; document.getElementById('shell').classList.add('shaking');}}
+                    else if (dFist > 0.32 && isFist) {isFist=false; document.getElementById('shell').classList.remove('shaking'); castLot();}
+                } else if (isComplete && dOK < 0.05 && !inkTriggered) { triggerInkEffect(); }
+            } else {
+                const video = document.getElementById('input_video'); if(video.readyState >= 2) canvasCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            }
+            canvasCtx.restore();
+        });
+
+        async function detectionLoop() {
+            if (!isDetecting) return;
+            const video = document.getElementById('input_video');
+            if (video.readyState >= 2 && video.videoWidth > 0) {
+                const canvas = document.getElementById('output_canvas');
+                if(canvas.width !== video.videoWidth) { canvas.width = video.videoWidth; canvas.height = video.videoHeight; }
+                try { await hands.send({image: video}); } catch(e) {}
+            }
+            setTimeout(() => requestAnimationFrame(detectionLoop), 30);
+        }
+
+        function castLot() {
+            if(history.length >= 6) return;
+            isAnimating = true;
+            const coins = [Math.round(Math.random()), Math.round(Math.random()), Math.round(Math.random())];
+            const sum = coins.reduce((a,b)=>a+b);
+            const cb = document.getElementById('coin-box'); cb.innerHTML = "";
+            coins.forEach(c => { const el = document.createElement('div'); el.className='coin pop'; el.innerText=c===1?"背":"字"; cb.appendChild(el); });
+            const res = { label: sum===3?"老阳":sum===0?"老阴":sum===1?"少阳":"少阴", type: (sum===1||sum===3)?"yang":"yin" };
+            history.push(res);
+            updateUI();
+            if(history.length === 3) { updateVisuals(history.map(h=>h.type==="yang"?"1":"0").join('')); }
+            else if(history.length === 6) { updateUpperVisuals(history.slice(3,6).map(h=>h.type==="yang"?"1":"0").join('')); isComplete = true; document.getElementById('status-bar').innerText = `本卦：${getGuaName(history, false)}。比出 OK 结卦。`; }
+            setTimeout(() => { Array.from(cb.children).forEach(c => c.classList.add('back')); setTimeout(() => { cb.innerHTML=""; isAnimating=false; }, 600); }, 1800);
+        }
+
+        function updateUI() {
+            document.getElementById('sidebar-results').style.display="block";
+            const container = document.getElementById('lines-container'), names = ["初爻", "二爻", "三爻", "四爻", "五爻", "上爻"];
+            let html = "";
+            for (let i = 5; i >= 0; i--) if (history[i]) html += `<div class="line-item"><span>${names[i]}: ${history[i].label}</span><div class="svg-symbol">${(history[i].type==="yang")?SVG_YANG:SVG_YIN}</div></div>`;
+            container.innerHTML = html;
+        }
+
+        function getGuaName(data, isZhi) {
+            let code = data.map(h => {
+                let isY = (h.type === "yang");
+                if (isZhi) { if (h.label === "老阳") isY = false; if (h.label === "老阴") isY = true; }
+                return isY ? "1" : "0";
+            }).join('');
+            return I_CHING_DATA[code] || "未知卦象";
+        }
+
+        function triggerInkEffect() {
+            inkTriggered = true;
+            const ink = document.getElementById('ink-overlay');
+            ink.style.opacity = "1";
+            
+            const zhiCodes = history.map(h => {
+                let isY = (h.type === "yang");
+                if (h.label === "老阳") isY = false; if (h.label === "老阴") isY = true;
+                return isY ? "1" : "0";
+            });
+            const zhiLower = zhiCodes.slice(0, 3).join('');
+            const zhiUpper = zhiCodes.slice(3, 6).join('');
+
+            setTimeout(() => {
+                const ben = getGuaName(history, false), zhi = getGuaName(history, true);
+                updateVisuals(zhiLower); 
+                updateUpperVisuals(zhiUpper);
+
+                document.getElementById('status-bar').innerHTML = `本卦：${ben} → 之卦：${zhi}`;
+                document.getElementById('lines-container').innerHTML = `<div style="margin-top:20px; border-top:1px solid var(--gold); padding-top:15px; line-height:1.8;">天机：【${ben}】 之 【${zhi}】<br><span style="font-size:0.8rem; opacity:0.8;">[ 诚心感悟，天机已现 ]</span></div>`;
+                
+                const userQuestion = document.getElementById('user-question').value;
+                let linesDetail = "";
+                const names = ["初爻", "二爻", "三爻", "四爻", "五爻", "上爻"];
+                for (let i = 0; i < history.length; i++) { linesDetail += `${names[i]}:${history[i].label} `; }
+
+                // --- Vercel 相对路径调用 ---
+                fetch('/api/interpret', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        question: userQuestion,
+                        originalHex: ben,
+                        changedHex: zhi,
+                        lines: linesDetail
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('ai-text').innerHTML = data.interpretation.replace(/\n/g, '<br>');
+                        document.getElementById('sidebar-results').scrollTop = document.getElementById('sidebar-results').scrollHeight;
+                    } else {
+                        document.getElementById('ai-text').innerHTML = "AI暂时无法窥得天机，请再试。";
+                    }
+                })
+                .catch(err => { document.getElementById('ai-text').innerHTML = "连接失败，请确保云端服务配置正确。"; });
+
+                setTimeout(() => { ink.style.opacity = "0"; }, 500);
+            }, 1200);
+        }
+
+        function resetAll() {
+            isDetecting = false; if (videoStream) { videoStream.getTracks().forEach(track => track.stop()); videoStream = null; }
+            history = []; isComplete = false; inkTriggered = false; isFist = false;
+            currentParticleMode = 'default'; updateVisuals('default'); pMat.color.set(0xd4af37); resetParticles();
+            document.getElementById('immersion-ctrl').style.borderColor = "#d4af37";
+            document.documentElement.style.setProperty('--gold', "#d4af37");
+            document.getElementById('input-screen').style.display = 'flex';
+            document.getElementById('gua-preview-bar').style.display = 'flex';
+            document.getElementById('divination-screen').style.display = 'none';
+            document.getElementById('sidebar-results').style.display = 'none';
+            document.getElementById('ai-text').innerHTML = "等待灵光注入...";
+            document.getElementById('status-bar').innerText = "灵场校准中..."; document.getElementById('user-question').value = "";
+        }
+
+        document.getElementById('start-btn').onclick = async () => {
+            if(!document.getElementById('user-question').value) return alert("请输入所求之事");
+            currentParticleMode = 'default'; updateVisuals('default'); pMat.color.set(0xd4af37); document.documentElement.style.setProperty('--gold', "#d4af37");
+            resetParticles(); document.getElementById('input-screen').style.display = 'none'; document.getElementById('gua-preview-bar').style.display = 'none';
+            document.getElementById('divination-screen').style.display = 'flex';
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+                const video = document.getElementById('input_video'); video.srcObject = videoStream;
+                video.onloadedmetadata = () => { video.play(); isDetecting = true; detectionLoop(); };
+            } catch (err) { alert("相机启动失败"); resetAll(); }
+        };
+
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) { document.documentElement.requestFullscreen(); }
+            else { if (document.exitFullscreen) { document.exitFullscreen(); } }
+        }
+        function toggleVideoPanel() {
+            document.getElementById('video-panel').classList.toggle('expanded');
+        }
+        window.addEventListener('resize', () => { renderer.setSize(window.innerWidth, window.innerHeight); camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); });
+    </script>
+</body>
+</html>

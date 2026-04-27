@@ -43,15 +43,15 @@
         .pop { animation: coinPop 0.6s ease-out forwards; }
         .back { animation: coinBack 0.6s ease-in forwards; }
         
-        /* 侧边栏及 AI 框优化 */
+        /* 侧边栏优化 */
         #sidebar-results { 
             position: absolute; right: 5%; top: 50%; transform: translateY(-50%); 
             border-left: 2px solid var(--gold); padding: 25px; 
-            background: rgba(0,0,0,0.85); width: 300px; /* 稍微加宽 */
+            background: rgba(0,0,0,0.85); width: 320px; 
             pointer-events: all; display: none; 
-            scrollbar-width: none; /* 隐藏火狐滚动条 */
+            scrollbar-width: none; 
         }
-        #sidebar-results::-webkit-scrollbar { display: none; } /* 隐藏 Chrome 滚动条 */
+        #sidebar-results::-webkit-scrollbar { display: none; }
 
         .line-item { margin: 12px 0; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center; }
         .svg-symbol { width: 100px; height: 14px; display: flex; justify-content: center; }
@@ -59,10 +59,13 @@
         #ai-interpretation { 
             margin-top: 20px; border-top: 1px solid var(--gold); padding-top: 12px; 
             font-size: 1rem; line-height: 1.6; max-height: 350px; overflow-y: auto;
-            cursor: zoom-in; /* 提示可以点击放大 */
+            cursor: zoom-in; 
             scrollbar-width: none;
         }
         #ai-interpretation::-webkit-scrollbar { display: none; }
+
+        /* 修复：AI 文字颜色跟随变量 */
+        #ai-text { color: var(--gold); opacity: 0.85; font-style: italic; }
 
         /* 全屏放大框样式 */
         #ai-modal {
@@ -73,11 +76,14 @@
         }
         #modal-content {
             width: 70%; max-height: 80%; overflow-y: auto;
-            color: var(--gold); font-size: 1.4rem; line-height: 1.8;
+            color: var(--gold); /* 修复：放大框文字也跟随变量 */
+            font-size: 1.4rem; line-height: 1.8;
             padding: 50px; border: 1px solid var(--gold);
             background: rgba(20, 20, 20, 0.5); box-shadow: 0 0 30px var(--gold);
+            scrollbar-width: none;
         }
-        #close-modal { position: absolute; top: 30px; right: 50px; font-size: 2rem; cursor: pointer; font-family: 'Cinzel'; }
+        #modal-content::-webkit-scrollbar { display: none; }
+        #close-modal { position: absolute; top: 30px; right: 50px; font-size: 2rem; cursor: pointer; font-family: 'Cinzel'; color: var(--gold); }
 
         #restart-btn { margin-top: 25px; width: 100%; background: transparent; border: 1px solid var(--gold); color: var(--gold); padding: 8px; cursor: pointer; font-family: 'Cinzel'; transition: 0.3s; }
         #restart-btn:hover { background: var(--gold); color: #000; }
@@ -105,8 +111,7 @@
 
     <div id="ai-modal" onclick="closeModal()">
         <div id="close-modal">CLOSE [X]</div>
-        <div id="modal-content" onclick="event.stopPropagation()">
-            </div>
+        <div id="modal-content" onclick="event.stopPropagation()"></div>
     </div>
 
     <div id="ui-overlay">
@@ -153,7 +158,7 @@
                 <div style="font-family:'Cinzel'; margin-bottom:8px; display: flex; align-items: center; gap: 8px;">
                     <span style="color: var(--gold);">✦</span> AI INTERPRETATION
                 </div>
-                <div id="ai-text" style="color:rgba(212, 175, 55, 0.85); font-style: italic;">等待灵光注入...</div>
+                <div id="ai-text">等待灵光注入...</div>
             </div>
             <button id="restart-btn" onclick="resetAll()">再占一卦</button>
         </div>
@@ -338,7 +343,7 @@
             return I_CHING_DATA[code] || "未知卦象";
         }
 
-        // --- 核心修改：放大镜逻辑 ---
+        // --- 放大镜逻辑 ---
         function openModal() {
             const modal = document.getElementById('ai-modal');
             const modalContent = document.getElementById('modal-content');
@@ -384,7 +389,6 @@
                 .then(data => {
                     if (data.success) {
                         document.getElementById('ai-text').innerHTML = data.interpretation.replace(/\n/g, '<br>');
-                        // 更新放大框里的内容（如果此时正打开着）
                         if(document.getElementById('ai-modal').style.display === "flex") {
                             document.getElementById('modal-content').innerHTML = data.interpretation.replace(/\n/g, '<br>');
                         }
